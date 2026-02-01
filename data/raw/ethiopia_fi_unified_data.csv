@@ -13,8 +13,5 @@ event_011,event,,,,,,Ethio Telecom,https://ethiotelecom.et/,high,Reached 54M+ us
 event_012,event,,,,,,Safaricom,https://www.safaricom.et/,high,Initial network launch,market_entry,Safaricom Ethiopia Launch,2022-08-01,Safaricom enters Ethiopian market,,,,,,,
 event_013,event,,,,,,Safaricom,https://www.safaricom.et/,high,Reached 10M+ users by 2024,product_launch,M-Pesa Launch in Ethiopia,2023-08-01,M-Pesa mobile money service launched,,,,,,,
 event_014,event,,,,,,National Bank of Ethiopia,https://nbe.gov.et/,high,Aiming for 60% financial inclusion by 2027,policy,NFIS-II Implementation,2023-01-01,National Financial Inclusion Strategy Phase II,,,,,,,
-impact_link_015,impact_link,access,,,,,,,,Based on M-Pesa impact in Kenya,,,,,event_telebirr_launch,ACC_OWNERSHIP,positive,high,12.0,comparable_country,
-impact_link_016,impact_link,usage,,,,,,,,Direct observation of growth from 4.7% to 9.45%,,,,,event_telebirr_launch,ACC_MM_ACCOUNT,positive,very_high,6.0,direct_observation,
-impact_link_017,impact_link,usage,,,,,,,,Based on Tanzania market entry experience,,,,,event_mpesa_launch,USG_DIGITAL_PAYMENT,positive,medium,9.0,comparable_country,
 target_018,target,access,Account Ownership Rate,ACC_OWNERSHIP,60.0,,NFIS-II,https://nbe.gov.et/,high,National Financial Inclusion Strategy target,,,,,,,,,,,2027-12-31
 target_019,target,usage,Digital Payment Adoption,USG_DIGITAL_PAYMENT,50.0,,NFIS-II,https://nbe.gov.et/,medium,Projected based on current growth rate,,,,,,,,,,,2027-12-31

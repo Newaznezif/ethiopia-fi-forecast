@@ -1,0 +1,4 @@
+﻿id,record_type,pillar,parent_id,related_indicator,impact_direction,impact_magnitude,lag_months,evidence_basis,notes,source_name,source_url,confidence
+impact_link_015,impact_link,access,event_011,ACC_OWNERSHIP,positive,high,12.0,comparable_country,Based on M-Pesa impact in Kenya,Research Team,,medium
+impact_link_016,impact_link,usage,event_011,ACC_MM_ACCOUNT,positive,very_high,6.0,direct_observation,Direct observation of growth from 4.7% to 9.45%,Research Team,,high
+impact_link_017,impact_link,usage,event_013,USG_DIGITAL_PAYMENT,positive,medium,9.0,comparable_country,Based on Tanzania market entry experience,Research Team,,medium

@@ -1,310 +1,313 @@
-﻿"""
-Data loading and validation module for Ethiopia Financial Inclusion Forecasting
+﻿# src/data_loader.py
 """
+Data loader for Ethiopia Financial Inclusion project
+"""
+
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
-import warnings
+from pathlib import Path
 from datetime import datetime
-import logging
-import os
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+import csv
+import warnings
+warnings.filterwarnings('ignore')
 
 class EthiopiaFIDataLoader:
-    """Load and validate Ethiopia financial inclusion data"""
+    """Load and prepare Ethiopia Financial Inclusion data"""
     
-    def __init__(self, data_path: str = None, ref_codes_path: str = None):
-        """
-        Initialize data loader
-        
-        Args:
-            data_path: Path to unified data CSV
-            ref_codes_path: Path to reference codes CSV
-        """
-        self.data_path = data_path or os.path.join('data', 'raw', 'ethiopia_fi_unified_data.csv')
-        self.ref_codes_path = ref_codes_path or os.path.join('data', 'raw', 'reference_codes.csv')
-        self.data = None
-        self.reference_codes = None
-        self.valid_codes_cache = {}
+    def __init__(self, data_dir="data/raw"):
+        self.data_dir = Path(data_dir)
+        self.main_data = None
         self.impact_links = None
+        self.reference_codes = None
+        self.observations = None
+        self.events = None
+        self.targets = None
         
-    def load_all_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Load all datasets
-        
-        Returns:
-            Tuple of (main_data, reference_codes)
-        """
-        logger.info(f"Loading data from {self.data_path}")
-        
-        try:
-            self.data = pd.read_csv(self.data_path)
-            logger.info(f"Loaded main dataset with {len(self.data)} records")
-        except FileNotFoundError:
-            logger.error(f"Main data file not found at {self.data_path}")
-            self.data = pd.DataFrame()
+    def load_all_data(self):
+        """Load all three datasets with robust error handling"""
+        print("📂 Loading Ethiopia Financial Inclusion data...")
+        success = True
         
         try:
-            self.reference_codes = pd.read_csv(self.ref_codes_path)
-            logger.info(f"Loaded reference codes with {len(self.reference_codes)} records")
-        except FileNotFoundError:
-            logger.error(f"Reference codes file not found at {self.ref_codes_path}")
-            self.reference_codes = pd.DataFrame()
-        
-        if not self.data.empty:
-            self._validate_schema()
-            self._validate_categorical_fields()
-            self._convert_dates()
-            self._load_impact_links()
-        
-        return self.data, self.reference_codes
-    
-    def _validate_schema(self):
-        """Validate that required columns exist"""
-        required_columns = ['record_id', 'record_type', 'indicator', 'indicator_code']
-        
-        missing_required = [col for col in required_columns if col not in self.data.columns]
-        if missing_required:
-            logger.warning(f"Missing required columns: {missing_required}")
-    
-    def _validate_categorical_fields(self):
-        """Validate categorical fields against reference codes"""
-        if self.reference_codes.empty:
-            return
+            # 1. Main dataset
+            self.main_data = pd.read_csv(self.data_dir / "ethiopia_fi_unified_data.csv")
+            print(f"  ✅ Main data: {len(self.main_data)} records")
             
-        categorical_fields = ['record_type', 'pillar', 'source_type', 'confidence']
+        except Exception as e:
+            print(f"  ❌ Error loading main data: {e}")
+            success = False
         
-        for field in categorical_fields:
-            if field in self.data.columns:
-                valid_values = self.reference_codes[
-                    self.reference_codes['field'] == field
-                ]['code'].tolist()
-                
-                if valid_values:
-                    invalid_mask = ~self.data[field].isin(valid_values) & ~self.data[field].isna()
-                    invalid_count = invalid_mask.sum()
-                    
-                    if invalid_count > 0:
-                        invalid_values_list = self.data.loc[invalid_mask, field].unique()[:5]
-                        logger.warning(f"Found {invalid_count} invalid values in {field}: {invalid_values_list}")
-                
-                self.valid_codes_cache[field] = valid_values
-    
-    def _convert_dates(self):
-        """Convert date columns to datetime"""
-        date_columns = ['observation_date', 'event_date', 'target_date', 'collection_date']
+        try:
+            # 2. Impact links
+            self.impact_links = pd.read_csv(self.data_dir / "impact_links.csv")
+            print(f"  ✅ Impact links: {len(self.impact_links)} records")
+            
+        except Exception as e:
+            print(f"  ❌ Error loading impact links: {e}")
+            success = False
         
-        for col in date_columns:
-            if col in self.data.columns:
+        try:
+            # 3. Reference codes - try multiple methods
+            ref_path = self.data_dir / "reference_codes.csv"
+            
+            # Try standard read first
+            try:
+                self.reference_codes = pd.read_csv(ref_path)
+                print(f"  ✅ Reference codes: {len(self.reference_codes)} records")
+                
+            except Exception as e:
+                print(f"  ⚠️  Standard read failed for reference codes: {e}")
+                print(f"  Trying alternative methods...")
+                
+                # Try with different parameters
                 try:
-                    self.data[col] = pd.to_datetime(self.data[col], errors='coerce')
-                except Exception as e:
-                    logger.warning(f"Failed to convert {col} to datetime: {e}")
-    
-    def _load_impact_links(self):
-        """Load impact links from data"""
-        if 'impact_direction' in self.data.columns:
-            self.impact_links = self.data[
-                self.data['impact_direction'].notna()
-            ].copy()
-            logger.info(f"Loaded {len(self.impact_links)} impact links")
+                    self.reference_codes = pd.read_csv(ref_path, encoding='utf-8', 
+                                                      on_bad_lines='skip')
+                    print(f"  ✅ Reference codes (skip bad lines): {len(self.reference_codes)} records")
+                except:
+                    # Try manual parsing
+                    try:
+                        with open(ref_path, 'r', encoding='utf-8') as f:
+                            lines = f.readlines()
+                        
+                        # Simple manual parsing
+                        data = []
+                        for line in lines:
+                            line = line.strip()
+                            if line and not line.startswith('#'):
+                                parts = line.split(',', 2)  # Split into max 3 parts
+                                if len(parts) == 3:
+                                    data.append([p.strip('\"\' ') for p in parts])
+                        
+                        if data:
+                            self.reference_codes = pd.DataFrame(data, 
+                                                              columns=['field', 'code', 'description'])
+                            print(f"  ✅ Reference codes (manual parse): {len(self.reference_codes)} records")
+                        else:
+                            print(f"  ❌ Could not parse reference codes")
+                            success = False
+                            
+                    except Exception as e2:
+                        print(f"  ❌ All methods failed for reference codes: {e2}")
+                        success = False
+        
+        except Exception as e:
+            print(f"  ❌ Unexpected error: {e}")
+            success = False
+        
+        if success:
+            # Convert dates
+            self._process_dates()
+            
+            # Separate by record type
+            self._separate_data()
+            
+            print("✅ All data loaded successfully!")
         else:
-            self.impact_links = pd.DataFrame()
-    
-    def get_record_type_stats(self) -> Dict[str, Any]:
-        """Get statistics by record type"""
-        if self.data is None or self.data.empty:
-            return {}
+            print("⚠️  Some data loading issues - check above errors")
         
-        stats = {
-            'counts': self.data['record_type'].value_counts().to_dict(),
-            'total_records': len(self.data)
+        return success
+    
+    def _process_dates(self):
+        """Convert date columns to datetime"""
+        # Main data dates
+        if self.main_data is not None:
+            date_cols = [col for col in self.main_data.columns if 'date' in col]
+            for col in date_cols:
+                if col in self.main_data.columns:
+                    self.main_data[col] = pd.to_datetime(self.main_data[col], errors='coerce')
+        
+        # Impact links numeric conversion
+        if self.impact_links is not None and 'lag_months' in self.impact_links.columns:
+            self.impact_links['lag_months'] = pd.to_numeric(
+                self.impact_links['lag_months'], errors='coerce'
+            )
+    
+    def _separate_data(self):
+        """Separate main data by record type"""
+        if self.main_data is not None:
+            self.observations = self.main_data[
+                self.main_data['record_type'] == 'observation'
+            ].copy()
+            
+            self.events = self.main_data[
+                self.main_data['record_type'] == 'event'
+            ].copy()
+            
+            self.targets = self.main_data[
+                self.main_data['record_type'] == 'target'
+            ].copy()
+            
+            print(f"  • Observations: {len(self.observations)}")
+            print(f"  • Events: {len(self.events)}")
+            print(f"  • Targets: {len(self.targets)}")
+    
+    def get_account_ownership_data(self):
+        """Get account ownership time series"""
+        if self.observations is None:
+            return pd.DataFrame()
+        
+        acc_data = self.observations[
+            self.observations['indicator_code'] == 'ACC_OWNERSHIP'
+        ].copy()
+        
+        if not acc_data.empty:
+            acc_data = acc_data.sort_values('observation_date')
+            acc_data['growth_pp'] = acc_data['value_numeric'].diff()
+            acc_data['growth_pct'] = acc_data['value_numeric'].pct_change() * 100
+        
+        return acc_data
+    
+    def get_usage_data(self):
+        """Get usage indicators data"""
+        if self.observations is None:
+            return pd.DataFrame()
+        
+        usage_data = self.observations[
+            self.observations['pillar'] == 'usage'
+        ].copy()
+        
+        return usage_data
+    
+    def get_infrastructure_data(self):
+        """Get infrastructure and enabler data"""
+        if self.observations is None:
+            return pd.DataFrame()
+        
+        infra_data = self.observations[
+            self.observations['pillar'].isin(['infrastructure', 'enabler'])
+        ].copy()
+        
+        return infra_data
+    
+    def get_event_impacts(self):
+        """Get combined event-impact analysis"""
+        if self.events is None or self.impact_links is None:
+            return pd.DataFrame()
+        
+        # Merge impact links with events
+        impact_analysis = pd.merge(
+            self.impact_links,
+            self.events[['id', 'event_name', 'event_date', 'category']],
+            left_on='parent_id',
+            right_on='id',
+            how='left',
+            suffixes=('_impact', '_event')
+        )
+        
+        return impact_analysis
+    
+    def get_data_summary(self):
+        """Get comprehensive data summary"""
+        summary = {
+            'total_records': len(self.main_data) if self.main_data is not None else 0,
+            'observations': len(self.observations) if self.observations is not None else 0,
+            'events': len(self.events) if self.events is not None else 0,
+            'targets': len(self.targets) if self.targets is not None else 0,
+            'impact_links': len(self.impact_links) if self.impact_links is not None else 0,
+            'reference_codes': len(self.reference_codes) if self.reference_codes is not None else 0,
         }
         
-        return stats
+        # Temporal coverage
+        if self.observations is not None and not self.observations.empty:
+            obs_years = self.observations['observation_date'].dt.year
+            summary['observation_years'] = sorted(obs_years.unique().tolist())
+            summary['year_range'] = f"{obs_years.min()} - {obs_years.max()}"
+        
+        # Event timeline
+        if self.events is not None and not self.events.empty:
+            event_years = self.events['event_date'].dt.year
+            summary['event_years'] = sorted(event_years.unique().tolist())
+        
+        return summary
     
-    def add_observation(self, 
-                       pillar: str,
-                       indicator: str,
-                       indicator_code: str,
-                       value_numeric: float,
-                       observation_date: str,
-                       source_name: str,
-                       source_url: str,
-                       confidence: str = 'medium',
-                       notes: str = '',
-                       **kwargs) -> str:
-        """
-        Add a new observation record
-        """
-        record_id = f"obs_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    def validate_data_quality(self):
+        """Validate data quality"""
+        issues = []
         
-        new_record = {
-            'record_id': record_id,
-            'record_type': 'observation',
-            'pillar': pillar,
-            'indicator': indicator,
-            'indicator_code': indicator_code,
-            'value_numeric': value_numeric,
-            'observation_date': observation_date,
-            'source_name': source_name,
-            'source_url': source_url,
-            'confidence': confidence,
-            'notes': notes,
-            'collected_by': kwargs.get('collected_by', 'system'),
-            'collection_date': kwargs.get('collection_date', datetime.now().strftime('%Y-%m-%d'))
-        }
+        # Check for missing values in key columns
+        if self.observations is not None:
+            required_cols = ['indicator', 'value_numeric', 'observation_date']
+            for col in required_cols:
+                if col in self.observations.columns:
+                    missing = self.observations[col].isnull().sum()
+                    if missing > 0:
+                        issues.append(f"Observations: {missing} missing values in {col}")
         
-        new_df = pd.DataFrame([new_record])
-        self.data = pd.concat([self.data, new_df], ignore_index=True)
+        # Check impact links reference valid events
+        if self.impact_links is not None and self.events is not None:
+            event_ids = set(self.events['id'])
+            impact_event_ids = set(self.impact_links['parent_id'])
+            missing_refs = impact_event_ids - event_ids
+            if missing_refs:
+                issues.append(f"Impact links reference non-existent events: {len(missing_refs)}")
         
-        logger.info(f"Added observation: {record_id}")
-        return record_id
+        return issues
+
+# Simple data loader without the EthiopiaFIDataLoader class
+def load_data_simple():
+    """Simple function to load data for the notebook"""
+    print("📂 Loading data for EDA notebook...")
     
-    def add_event(self,
-                  event_name: str,
-                  event_date: str,
-                  category: str,
-                  description: str = '',
-                  source_name: str = '',
-                  source_url: str = '',
-                  confidence: str = 'medium',
-                  **kwargs) -> str:
-        """
-        Add a new event record
-        """
-        record_id = f"evt_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
-        new_record = {
-            'record_id': record_id,
-            'record_type': 'event',
-            'pillar': '',  # Events don't have pillar
-            'indicator': event_name,
-            'indicator_code': f"EVENT_{category.upper()}",
-            'event_name': event_name,
-            'event_date': event_date,
-            'event_category': category,
-            'description': description,
-            'source_name': source_name,
-            'source_url': source_url,
-            'confidence': confidence,
-            'notes': description,
-            'collected_by': kwargs.get('collected_by', 'system'),
-            'collection_date': kwargs.get('collection_date', datetime.now().strftime('%Y-%m-%d'))
-        }
-        
-        new_df = pd.DataFrame([new_record])
-        self.data = pd.concat([self.data, new_df], ignore_index=True)
-        
-        logger.info(f"Added event: {record_id}")
-        return record_id
+    data = {}
     
-    def add_impact_link(self,
-                       parent_id: str,
-                       pillar: str,
-                       related_indicator: str,
-                       impact_direction: str,
-                       impact_magnitude: float,
-                       lag_months: int = 0,
-                       evidence_basis: str = '',
-                       **kwargs) -> str:
-        """
-        Add a new impact link record
-        """
-        record_id = f"imp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    try:
+        # Load main data
+        data['main'] = pd.read_csv("data/raw/ethiopia_fi_unified_data.csv")
+        print(f"✅ Main data: {len(data['main'])} records")
         
-        new_record = {
-            'record_id': record_id,
-            'record_type': 'impact_link',
-            'pillar': pillar,
-            'indicator': 'Impact Link',
-            'indicator_code': 'IMPACT_LINK',
-            'parent_id': parent_id,
-            'related_indicator': related_indicator,
-            'impact_direction': impact_direction,
-            'impact_magnitude': impact_magnitude,
-            'lag_months': lag_months,
-            'evidence_basis': evidence_basis,
-            'notes': f"Impact of {parent_id} on {related_indicator}",
-            'collected_by': kwargs.get('collected_by', 'system'),
-            'collection_date': kwargs.get('collection_date', datetime.now().strftime('%Y-%m-%d'))
-        }
+        # Load impact links
+        data['impact'] = pd.read_csv("data/raw/impact_links.csv")
+        print(f"✅ Impact links: {len(data['impact'])} records")
         
-        new_df = pd.DataFrame([new_record])
-        self.data = pd.concat([self.data, new_df], ignore_index=True)
+        # Load reference codes (with error handling)
+        try:
+            data['ref'] = pd.read_csv("data/raw/reference_codes.csv")
+            print(f"✅ Reference codes: {len(data['ref'])} records")
+        except:
+            # Create minimal reference codes if file is corrupted
+            print("⚠️  Using default reference codes")
+            data['ref'] = pd.DataFrame({
+                'field': ['record_type', 'pillar', 'confidence'],
+                'code': ['observation,event,impact_link,target', 
+                        'access,usage,infrastructure,enabler',
+                        'high,medium,low'],
+                'description': ['Record types', 'Pillars', 'Confidence levels']
+            })
         
-        logger.info(f"Added impact link: {record_id}")
-        return record_id
+        return data
+        
+    except Exception as e:
+        print(f"❌ Error loading data: {e}")
+        return None
+
+# Quick test function
+def test_data_loader():
+    """Test the data loader"""
+    print("🧪 Testing Data Loader...")
     
-    def save_enriched_data(self, output_path: str = None):
-        """Save enriched dataset"""
-        if self.data is None:
-            raise ValueError("No data to save")
-        
-        if output_path is None:
-            output_path = os.path.join('data', 'processed', 'ethiopia_fi_enriched.csv')
-        
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        self.data.to_csv(output_path, index=False)
-        logger.info(f"Saved data to {output_path}")
+    loader = EthiopiaFIDataLoader()
     
-    def get_temporal_coverage(self) -> pd.DataFrame:
-        """Get temporal coverage by indicator"""
-        if self.data is None or self.data.empty:
-            return pd.DataFrame()
+    if loader.load_all_data():
+        print("\n📊 Data Summary:")
+        summary = loader.get_data_summary()
+        for key, value in summary.items():
+            if key not in ['observation_years', 'event_years', 'year_range']:
+                print(f"  {key}: {value}")
         
-        # Filter observation records
-        observations = self.data[self.data['record_type'] == 'observation'].copy()
+        print("\n🔍 Data Quality Check:")
+        issues = loader.validate_data_quality()
+        if issues:
+            print("  Issues found:")
+            for issue in issues:
+                print(f"  • {issue}")
+        else:
+            print("  ✅ No data quality issues found")
         
-        if observations.empty or 'observation_date' not in observations.columns:
-            return pd.DataFrame()
-        
-        # Group by indicator and get date range
-        temporal_coverage = observations.groupby('indicator_code').agg({
-            'observation_date': ['min', 'max', 'count'],
-            'source_name': lambda x: list(x.unique())[:5],
-            'confidence': lambda x: x.mode()[0] if not x.empty else None
-        }).round(2)
-        
-        # Flatten column names
-        temporal_coverage.columns = ['first_date', 'last_date', 'count', 'sources', 'confidence']
-        
-        return temporal_coverage
-    
-    def get_events_timeline(self) -> pd.DataFrame:
-        """Get timeline of events"""
-        if self.data is None or self.data.empty:
-            return pd.DataFrame()
-        
-        events = self.data[self.data['record_type'] == 'event'].copy()
-        
-        if events.empty:
-            return pd.DataFrame()
-        
-        timeline = events[[
-            'record_id', 'event_name', 'event_date', 'event_category',
-            'source_name', 'confidence', 'notes'
-        ]].sort_values('event_date')
-        
-        return timeline
-    
-    def get_observations_by_indicator(self, indicator_code: str = None) -> pd.DataFrame:
-        """Get observations for specific indicator or all indicators"""
-        if self.data is None or self.data.empty:
-            return pd.DataFrame()
-        
-        observations = self.data[self.data['record_type'] == 'observation'].copy()
-        
-        if observations.empty:
-            return pd.DataFrame()
-        
-        if indicator_code:
-            observations = observations[observations['indicator_code'] == indicator_code]
-        
-        return observations.sort_values('observation_date')
+        return loader
+    else:
+        print("❌ Failed to load data")
+        return None
+
+if __name__ == "__main__":
+    test_data_loader()
