@@ -1,0 +1,11 @@
+﻿# Core requirements for our Ethiopia FI project
+pandas>=1.5.0
+numpy>=1.21.0
+matplotlib>=3.5.0
+jupyter>=1.0.0
+
+# For future tasks
+scikit-learn>=1.0.0
+statsmodels>=0.13.0
+plotly>=5.10.0
+streamlit>=1.12.0
